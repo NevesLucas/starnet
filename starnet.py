@@ -41,7 +41,7 @@ gen_plots = True                       # Plot losses after each epoch. This also
 learning_rates = [0.000002, 0.0000005] # Learning rates: the first is for generator, the second is for discriminator. Usually they are the same,
                                        # but who knows. In the beginning of training suitable values are about 0.0002 and then can be made smaller
                                        # as the model gets better.
-stride = 64                            # Stride value for image transformation. The smaller it gets, the less artefacts you get in the final image,
+stride = 134                            # Stride value for image transformation. The smaller it gets, the less artefacts you get in the final image,
                                        # but the more time it takes to transform an image. 100 looks about optimal for now.
 
 if len(sys.argv) > 1:

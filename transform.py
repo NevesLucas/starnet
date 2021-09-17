@@ -14,7 +14,7 @@
 
 import numpy as np
 import tensorflow as tf
-from PIL import Image as img
+import tensorflow.python.data as tfd
 import matplotlib.pyplot as plt
 import matplotlib
 import sys
@@ -27,12 +27,79 @@ WINDOW_SIZE = 256                      # Size of the image fed to net. Do not ch
                                        # and changing this will force you to train the net anew.
 def transform(imageName, stride):
 
+    # read input image
+    print("Opening input image...")
+    data = tiff.imread(imageName)
+    if len(data.shape) > 3:
+        layer = input("Tiff has %d layers, please enter layer to process: " % data.shape[0])
+        layer = int(layer)
+        data = data[layer]
+
+    input_dtype = data.dtype
+    if input_dtype == 'uint16':
+        image = (data / 255.0 / 255.0).astype('float32')
+    elif input_dtype == 'uint8':
+        image = (data / 255.0).astype('float32')
+    else:
+        raise ValueError('Unknown image dtype:', data.dtype)
+
+    if image.shape[2] == 4:
+        print("Input image has 4 channels. Removing Alpha-Channel")
+        image = image[:, :, [0, 1, 2]]
+
+    # now some tricky magic
+    # image size is unlikely to be multiple of stride and hence we need to pad the image and
+    # also we need some additional padding to allow offsets on sides of the image
+    offset = int((WINDOW_SIZE - stride) / 2)
+
+    # get size of the image and calculate numbers of iterations needed to transform it
+    # given stride and taking into account that we will pad it a bit later (+1 comes from that)
+    h, w, _ = image.shape
+    ith = int(h / stride) + 1
+    itw = int(w / stride) + 1
+
+    # calculate how much we need to add to make image sizes multiples of stride
+    dh = ith * stride - h
+    dw = itw * stride - w
+
+    # pad image using parts of the image itself and values calculated above
+    image = np.concatenate((image, image[(h - dh):, :, :]), axis=0)
+    image = np.concatenate((image, image[:, (w - dw):, :]), axis=1)
+
+    # get image size again and pad to allow offsets on all four sides of the image
+    h, w, _ = image.shape
+    image = np.concatenate((image, image[(h - offset):, :, :]), axis=0)
+    image = np.concatenate((image[: offset, :, :], image), axis=0)
+    image = np.concatenate((image, image[:, (w - offset):, :]), axis=1)
+    image = np.concatenate((image[:, : offset, :], image), axis=1)
+
+    # copy input image to output
+    output = np.copy(image)
+
+    # helper array just to add fourth dimension to net input
+    tmp = np.zeros((ith * itw, WINDOW_SIZE, WINDOW_SIZE, 3), dtype=np.float32)
+    # here goes
+    for i in range(ith):
+        for j in range(itw):
+            #print('Transforming input image... %d%%\r' % int((itw * i + j + 1) * 100 / (ith * itw)))
+
+            x = stride * i
+            y = stride * j
+
+            tmp[j + itw * i] = image[x: x + WINDOW_SIZE, y: y + WINDOW_SIZE, :]
+    # transform
+    dataset = tfd.Dataset.from_tensor_slices(tmp)
+    batched_dataset = dataset.batch(4)
+    batched_dataset = batched_dataset.prefetch(buffer_size=1)
+    iterator = batched_dataset.make_one_shot_iterator()
+    imgBatch = iterator.get_next()
+
     # placeholders for tensorflow
-    X = tf.placeholder(tf.float32, shape = [None, WINDOW_SIZE, WINDOW_SIZE, 3], name = "X")
+
     Y = tf.placeholder(tf.float32, shape = [None, WINDOW_SIZE, WINDOW_SIZE, 3], name = "Y")
 
     # create model
-    train, avers, outputs = model.model(X, Y)
+    train, avers, outputs = model.model(imgBatch, Y)
     
     #initialize variables
     init = tf.global_variables_initializer()
@@ -48,76 +115,20 @@ def transform(imageName, stride):
         print("Restoring previous state of the model...")
         saver.restore(sess, "./model.ckpt")
         print("Done!")
-        
-        # read input image
-        print("Opening input image...")
-        data = tiff.imread(imageName)
-        if len(data.shape) > 3:
-            layer = input("Tiff has %d layers, please enter layer to process: " % data.shape[0])
-            layer = int(layer)
-            data = data[layer]
+        try:
+            # Go through the entire dataset
+            result = sess.run(outputs)
+            while True:
+                result = np.concatenate([result, sess.run(outputs)])
 
-        input_dtype = data.dtype
-        if input_dtype == 'uint16':
-            image = (data / 255.0 / 255.0).astype('float32')
-        elif input_dtype == 'uint8':
-            image = (data / 255.0).astype('float32')
-        else:
-            raise ValueError('Unknown image dtype:', data.dtype)
-
-        if image.shape[2] == 4:
-            print("Input image has 4 channels. Removing Alpha-Channel")
-            image = image[:, :, [0, 1, 2]]
-        
-        
-        # now some tricky magic
-        # image size is unlikely to be multiple of stride and hence we need to pad the image and
-        # also we need some additional padding to allow offsets on sides of the image
-        offset = int((WINDOW_SIZE - stride) / 2)
-        
-        # get size of the image and calculate numbers of iterations needed to transform it
-        # given stride and taking into account that we will pad it a bit later (+1 comes from that)
-        h, w, _ = image.shape
-        ith = int(h / stride) + 1
-        itw = int(w / stride) + 1
-        
-        # calculate how much we need to add to make image sizes multiples of stride
-        dh = ith * stride - h
-        dw = itw * stride - w
-        
-        # pad image using parts of the image itself and values calculated above
-        image = np.concatenate((image, image[(h - dh) :, :, :]), axis = 0)
-        image = np.concatenate((image, image[:, (w - dw) :, :]), axis = 1)
-        
-        # get image size again and pad to allow offsets on all four sides of the image
-        h, w, _ = image.shape
-        image = np.concatenate((image, image[(h - offset) :, :, :]), axis = 0)
-        image = np.concatenate((image[: offset, :, :], image), axis = 0)
-        image = np.concatenate((image, image[:, (w - offset) :, :]), axis = 1)
-        image = np.concatenate((image[:, : offset, :], image), axis = 1)
-        
-        # copy input image to output
-        output = np.copy(image)
-        
-        # helper array just to add fourth dimension to net input
-        tmp = np.zeros((1, WINDOW_SIZE, WINDOW_SIZE, 3), dtype = np.float)
-        
-        # here goes
+        except tf.errors.OutOfRangeError:
+            print('End of image.')
+        # write transformed array to output
         for i in range(ith):
             for j in range(itw):
-                print('Transforming input image... %d%%\r' % int((itw * i + j + 1) * 100 / (ith * itw)))
-                
                 x = stride * i
                 y = stride * j
-                
-                # write piece of input image to tmp array
-                tmp[0] = image[x : x + WINDOW_SIZE, y : y + WINDOW_SIZE, :]
-                
-                # transform
-                result = sess.run(outputs, feed_dict = {X:tmp})
-                
-                # write transformed array to output
-                output[x + offset : x + stride + offset, y + offset: y + stride + offset, :] = result[0, offset : stride + offset, offset : stride + offset, :]
+                output[x + offset : x + stride + offset, y + offset: y + stride + offset, :] = result[j + itw * i, offset : stride + offset, offset : stride + offset, :]
         print("Transforming input image... Done!")
 
         # rescale back to [0, 1]
