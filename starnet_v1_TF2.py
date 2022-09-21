@@ -78,10 +78,13 @@ class StarNet():
         print("One epoch is set to %d iterations" % self.iters_per_epoch)
         print("Training dataset has been successfully loaded!")
         
-    def load_model(self, weights = None, history = None):
+    def load_model(self, weights = None, history = None, inference=False):
         self.G = self._generator(m = 64)
         self.D = self._discriminator()
-        
+        if inference:
+            self.G.trainable=False  
+            self.D.trainable=False
+            
         self.gen_optimizer = tf.optimizers.Adam(self.lr)
         self.dis_optimizer = tf.optimizers.Adam(self.lr / 4)
         

@@ -11,5 +11,5 @@ dependencies:
     - ipython
     - tifffile
     - pip:
-        - tensorflow-cpu
+        - tensorflow-cpu==2.9
         - tensorflow-directml-plugin
