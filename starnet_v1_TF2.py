@@ -6,6 +6,10 @@ import numpy as np
 import tensorflow as tf
 import tensorflow.keras as K
 import tensorflow.keras.layers as L
+from tensorflow.keras import mixed_precision
+policy = mixed_precision.Policy('mixed_float16')
+mixed_precision.set_global_policy(policy)
+
 import copy
 import pickle
 import tifffile as tiff
@@ -486,7 +490,7 @@ class StarNet():
         rectified = L.ReLU()(concatenated)
         deconvolved = L.Conv2DTranspose(self.input_channels, kernel_size = 4, strides = (2, 2), padding = "same", kernel_initializer = tf.initializers.GlorotUniform())(rectified)
         rectified = L.ReLU()(deconvolved)
-        output = tf.math.subtract(input, rectified)
+        output = tf.math.subtract(input, tf.cast(rectified,dtype=tf.float32))
         
         return K.Model(inputs = input, outputs = output, name = "generator")
         

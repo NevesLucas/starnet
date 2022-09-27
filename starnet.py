@@ -17,7 +17,7 @@ import time
 import os
 
 # this line hides lots of additional bulky output from TF. Comment out if you debug your script.
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+#os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 
 epochs = 10000                         # Number of training epochs to do before exiting. You can safely interrupt the script only 
@@ -102,9 +102,9 @@ if len(sys.argv) > 1:
             print("Exiting...")
         else:
             start = time.time()
-            import transform
-            transform.transform(imageName = sys.argv[2],
-                                stride    = stride)
+            import transformT2
+            transformT2.transform(imageName = sys.argv[2],
+                                  stride    = stride)
             stop = time.time()
             t = float((stop - start) / 60)
             if t > 60.0:

@@ -14,7 +14,6 @@
 
 import numpy as np
 from PIL import Image as img
-from scipy.misc import toimage
 import matplotlib.pyplot as plt
 import sys
 from os import listdir
